@@ -2308,27 +2308,37 @@
 
         // 若已有舊連線先移除
         if (realtimeChannel) {
-            supabaseClient.removeChannel(realtimeChannel);
+            try { supabaseClient.removeChannel(realtimeChannel); } catch (e) {}
         }
 
+        console.log('[Supabase Realtime] 正在建立 WebSocket 連線通道...');
+
         realtimeChannel = supabaseClient
-            .channel('cnc_workshop_realtime')
+            .channel('cnc_storage_channel')
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*', // 監聽 INSERT, UPDATE, DELETE
                     schema: 'public',
-                    table: 'cnc_storage',
-                    filter: 'id=eq.default_workshop'
+                    table: 'cnc_storage'
                 },
                 (payload) => {
+                    console.log('[Supabase Realtime] 收到即時變更廣播:', payload);
                     const newData = payload.new;
-                    if (!newData) return;
+                    if (!newData || !newData.master_tools) return;
 
                     // 避免收到自己剛剛發送的回音更新
-                    const remoteJson = JSON.stringify(newData.master_tools);
-                    const localJson = JSON.stringify(state.masterTools);
-                    if (remoteJson === localJson) return;
+                    const remoteJson = JSON.stringify(newData);
+                    const localJson = JSON.stringify({
+                        id: 'default_workshop',
+                        master_tools: state.masterTools,
+                        hierarchy: state.hierarchy,
+                        custom_fields: state.customFields
+                    });
+                    if (remoteJson === localJson) {
+                        console.log('[Supabase Realtime] 忽略本機觸發的廣播回音');
+                        return;
+                    }
 
                     isApplyingRemoteChange = true;
                     state.masterTools = newData.master_tools || [];
@@ -2341,12 +2351,14 @@
                     showToast('🔄 Realtime: 收到其他設備即時更新！', 'info', 3000);
                 }
             )
-            .subscribe((status) => {
+            .subscribe((status, err) => {
+                console.log('[Supabase Realtime] 訂閱狀態變更:', status, err || '');
                 if (status === 'SUBSCRIBED') {
-                    console.log('Supabase Realtime WebSocket 長連線已建立！');
+                    console.log('✅ Supabase Realtime WebSocket 長連線已成功連通！');
                     updateCloudStatusUI('connected', '雲端同步中');
                 } else if (status === 'CHANNEL_ERROR') {
-                    console.warn('Realtime 連線中斷');
+                    console.error('❌ Realtime 連線失敗，請確認 Supabase 後台 Replication 是否開啟 cnc_storage');
+                    showToast('Realtime 連線受阻，請確認後台 Replication 設定', 'warning', 4000);
                 }
             });
     }

@@ -2210,8 +2210,9 @@
     }
 
     function initSupabase() {
-        const savedUrl = localStorage.getItem('cnc_supabase_url');
-        const savedKey = localStorage.getItem('cnc_supabase_key');
+        const envConfig = window.__ENV__ || {};
+        const savedUrl = envConfig.SUPABASE_URL || localStorage.getItem('cnc_supabase_url');
+        const savedKey = envConfig.SUPABASE_ANON_KEY || localStorage.getItem('cnc_supabase_key');
 
         if (!savedUrl || !savedKey || !window.supabase) {
             updateCloudStatusUI('offline', '本機模式');

@@ -410,11 +410,40 @@
             });
         }
 
+        // Mobile Sidebar Drawer Toggle & Overlay Handlers
+        const mobileToggleBtn = document.getElementById('mobileSidebarToggleBtn');
+        const mobileOverlay = document.getElementById('mobileSidebarOverlay');
+        if (mobileToggleBtn) {
+            mobileToggleBtn.addEventListener('click', () => toggleMobileSidebar());
+        }
+        if (mobileOverlay) {
+            mobileOverlay.addEventListener('click', () => toggleMobileSidebar(false));
+        }
+
         // Modals & Calculator Listeners
         setupModalListeners();
         setupCalculatorListeners();
         setupPresetterModalListeners();
         setupSupabaseListeners();
+    }
+
+    function toggleMobileSidebar(force) {
+        const sidebar = document.getElementById('sidebarTreeAside');
+        const overlay = document.getElementById('mobileSidebarOverlay');
+        if (!sidebar || !overlay) return;
+
+        const isCurrentlyOpen = !sidebar.classList.contains('-translate-x-full');
+        const shouldOpen = (force !== undefined) ? force : !isCurrentlyOpen;
+
+        if (shouldOpen) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.add('translate-x-0');
+            overlay.classList.remove('hidden');
+        } else {
+            sidebar.classList.add('-translate-x-full');
+            sidebar.classList.remove('translate-x-0');
+            overlay.classList.add('hidden');
+        }
     }
 
     function switchTab(tabId) {
@@ -690,6 +719,11 @@
         if (state.activeTab === 'tab-master') {
             switchTab('tab-hierarchy');
         }
+
+        // 手機/平板選取後自動收合左側抽屜
+        if (window.innerWidth < 1024) {
+            toggleMobileSidebar(false);
+        }
     };
 
     window.deleteMachine = function (machineId) {
@@ -821,9 +855,9 @@
                 `;
             } else {
                 toolContentHtml = `
-                    <div class="flex-1 flex items-center justify-between bg-slate-900/40 p-2.5 rounded-lg border border-dashed border-slate-700 text-slate-500 text-xs">
-                        <span>未綁定刀具 (空刀位) - 可從右側或刀具總表拖曳至此處</span>
-                        <select onchange="window.bindSlotTool('${escapeHtml(slot.slotNo)}', this.value)" class="bg-slate-800 text-slate-300 text-xs rounded border border-slate-700 px-2 py-1 focus:outline-none">
+                    <div class="flex-1 flex flex-wrap items-center justify-between bg-slate-900/40 p-2.5 rounded-lg border border-dashed border-slate-700 text-slate-500 text-xs gap-2">
+                        <span>未綁定刀具 (空刀位) - 可從右側點擊「+」或拖曳指派</span>
+                        <select onchange="window.bindSlotTool('${escapeHtml(slot.slotNo)}', this.value)" class="bg-slate-800 text-slate-300 text-xs rounded border border-slate-700 px-2 py-1 focus:outline-none max-w-full">
                             <option value="">-- 手動選擇刀具 --</option>
                             ${state.masterTools.map(mt => `<option value="${escapeHtml(mt.id)}">${escapeHtml(mt.id)} - ${escapeHtml(mt.name)} (D${mt.d})</option>`).join('')}
                         </select>
@@ -838,15 +872,15 @@
                      ondragleave="window.handleSlotDragLeave(event)"
                      ondrop="window.handleSlotDrop(event, '${escapeHtml(slot.slotNo)}')">
                     
-                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
-                        <div class="flex items-center gap-3">
-                            <span class="w-8 h-8 rounded-lg bg-blue-600 text-white font-mono font-bold flex items-center justify-center text-sm shadow">
+                    <div class="flex flex-wrap items-center justify-between border-b border-slate-700/60 pb-2 gap-2">
+                        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 text-white font-mono font-bold flex items-center justify-center text-xs sm:text-sm shadow flex-shrink-0">
                                 ${escapeHtml(slot.slotNo)}
                             </span>
-                            <div class="flex items-center gap-4 text-xs font-mono">
-                                <div><span class="text-slate-400">長度補償 H:</span> <strong class="text-cyan-300">H${escapeHtml(slot.offsetH || idx + 1)}</strong></div>
-                                <div><span class="text-slate-400">刀徑補償 D:</span> <strong class="text-cyan-300">D${escapeHtml(slot.offsetD || idx + 1)}</strong></div>
-                                <div><span class="text-slate-400">凸出長度:</span> <input type="number" value="${slot.overhangL || 35}" onchange="window.updateSlotOverhang('${escapeHtml(slot.slotNo)}', this.value)" class="w-14 bg-slate-900 text-slate-200 border border-slate-700 rounded px-1 py-0.5 text-center text-xs"> mm</div>
+                            <div class="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono">
+                                <div><span class="text-slate-400">H:</span> <strong class="text-cyan-300">H${escapeHtml(slot.offsetH || idx + 1)}</strong></div>
+                                <div><span class="text-slate-400">D:</span> <strong class="text-cyan-300">D${escapeHtml(slot.offsetD || idx + 1)}</strong></div>
+                                <div><span class="text-slate-400">凸出:</span> <input type="number" value="${slot.overhangL || 35}" onchange="window.updateSlotOverhang('${escapeHtml(slot.slotNo)}', this.value)" class="w-12 sm:w-14 bg-slate-900 text-slate-200 border border-slate-700 rounded px-1 py-0.5 text-center text-xs"> mm</div>
                             </div>
                         </div>
 
@@ -885,19 +919,24 @@
 
         container.innerHTML = list.map(t => {
             return `
-                <div class="p-2.5 bg-slate-900/90 rounded-lg border border-slate-700/80 hover:border-blue-500 cursor-grab active:cursor-grabbing transition group flex items-center justify-between"
+                <div class="p-2.5 bg-slate-900/90 rounded-lg border border-slate-700/80 hover:border-blue-500 cursor-grab active:cursor-grabbing transition group flex items-center justify-between gap-2"
                      draggable="true"
                      ondragstart="window.handleToolDragStart(event, '${escapeHtml(t.id)}')">
-                    <div class="truncate">
+                    <div class="truncate flex-1 min-w-0">
                         <div class="flex items-center gap-1.5">
-                            <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400"></i>
+                            <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 flex-shrink-0"></i>
                             <span class="font-mono font-bold text-xs text-cyan-400">${escapeHtml(t.id)}</span>
-                            <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded">${escapeHtml(t.type)}</span>
+                            <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded truncate">${escapeHtml(t.type)}</span>
                         </div>
                         <div class="text-xs text-slate-200 truncate pl-5">${escapeHtml(t.name)}</div>
                     </div>
-                    <div class="text-right font-mono text-xs text-slate-400 flex-shrink-0">
-                        <div>D${escapeHtml(t.d)}</div>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                        <span class="font-mono text-xs text-slate-400">D${escapeHtml(t.d)}</span>
+                        <button onclick="window.assignToolToNextEmptySlot('${escapeHtml(t.id)}')" 
+                                title="一鍵指派至目前工件空刀槽" 
+                                class="p-1 text-xs bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white rounded border border-slate-700 transition flex items-center gap-0.5">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        </button>
                     </div>
                 </div>
             `;
@@ -910,6 +949,40 @@
             filterInput.addEventListener('input', renderQuickToolPicker);
         }
     }
+
+    // Touch/Click Quick Assign Helper for Mobile and Tablet
+    window.assignToolToNextEmptySlot = function (toolId) {
+        if (!state.selectedSetupId) {
+            showToast('請先由左側機台樹選取工件/工序！', 'warning');
+            return;
+        }
+        const nodeInfo = findPartNodeById(state.selectedSetupId);
+        if (!nodeInfo || !nodeInfo.part) return;
+
+        const part = nodeInfo.part;
+        part.slots = part.slots || [];
+        let targetSlot = part.slots.find(s => !s.toolId);
+
+        if (!targetSlot) {
+            const slotIdx = part.slots.length + 1;
+            const slotNo = 'T' + String(slotIdx).padStart(2, '0');
+            targetSlot = {
+                slotNo,
+                toolId: null,
+                offsetH: slotIdx,
+                offsetD: slotIdx,
+                overhangL: 35,
+                comment: ''
+            };
+            part.slots.push(targetSlot);
+        }
+
+        targetSlot.toolId = toolId;
+        saveState();
+        renderPartSetupTab();
+        renderHierarchyTree();
+        showToast(`已指派刀具 [${toolId}] 至 ${targetSlot.slotNo}`, 'success');
+    };
 
     // Drag and Drop Event Handlers
     window.handleToolDragStart = function (e, toolId) {

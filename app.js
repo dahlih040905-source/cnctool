@@ -243,18 +243,20 @@
     let cloudSyncTimer = null;
     let isApplyingRemoteChange = false;
 
-    // Save state to LocalStorage & Debounce Sync to Cloud
+    // Save state: 本地模式才存 LocalStorage；連線雲端時以 Supabase 為單一資料源 (SSOT)
     function saveState(skipCloud = false) {
-        try {
-            localStorage.setItem('cnc_master_tools', JSON.stringify(state.masterTools));
-            localStorage.setItem('cnc_custom_fields', JSON.stringify(state.customFields));
-            localStorage.setItem('cnc_hierarchy', JSON.stringify(state.hierarchy));
-        } catch (e) {
-            console.error('LocalStorage save failed:', e);
-            showToast('資料儲存失敗，請檢查瀏覽器空間配額', 'error');
-        }
-
-        if (!skipCloud && supabaseClient && !isApplyingRemoteChange) {
+        if (!supabaseClient) {
+            // 純本地模式：寫入 localStorage
+            try {
+                localStorage.setItem('cnc_master_tools', JSON.stringify(state.masterTools));
+                localStorage.setItem('cnc_custom_fields', JSON.stringify(state.customFields));
+                localStorage.setItem('cnc_hierarchy', JSON.stringify(state.hierarchy));
+            } catch (e) {
+                console.error('LocalStorage save failed:', e);
+                showToast('資料儲存失敗，請檢查瀏覽器空間配額', 'error');
+            }
+        } else if (!skipCloud && !isApplyingRemoteChange) {
+            // 雲端模式：防抖同步至 Supabase，不污染 localStorage
             debounceSyncToCloud();
         }
     }
@@ -2241,26 +2243,25 @@
             if (error) throw error;
 
             if (data && data.master_tools && data.master_tools.length > 0) {
-                // 雲端有資料，覆蓋本機並渲染
+                // 雲端有資料，直接以雲端為準更新記憶體狀態並渲染 (不污染 localStorage)
                 isApplyingRemoteChange = true;
                 state.masterTools = data.master_tools || state.masterTools;
                 state.hierarchy = data.hierarchy || state.hierarchy;
                 state.customFields = data.custom_fields || state.customFields;
-                saveState(true); // 僅存 local，不重複推上雲端
                 renderAll();
                 isApplyingRemoteChange = false;
                 updateCloudStatusUI('connected', '雲端同步中');
-                showToast('已從 Supabase 雲端資料庫載入最新車間設定', 'success');
+                showToast('已從 Supabase 雲端載入最新資料', 'success');
             } else {
-                // 雲端表剛建立是空的，自動將本機目前的資料推上雲端作為初始版
+                // 雲端表剛建立是空的，將當前預設/現有資料推上雲端建立初始版本
                 await pushStateToCloud(true);
                 updateCloudStatusUI('connected', '雲端同步中');
-                showToast('已將本機現有刀具資料初始化上傳至雲端', 'success');
+                showToast('已在 Supabase 雲端建立初始資料庫資料', 'success');
             }
         } catch (err) {
             console.error('fetchCloudState error:', err);
             updateCloudStatusUI('error', '雲端連線失敗');
-            showToast('雲端資料讀取失敗，已自動降級使用本機快取', 'warning');
+            showToast('雲端資料讀取失敗，請檢查金鑰或網路', 'warning');
         }
     }
 
@@ -2332,12 +2333,11 @@
                     state.masterTools = newData.master_tools || [];
                     state.hierarchy = newData.hierarchy || [];
                     state.customFields = newData.custom_fields || [];
-                    saveState(true);
                     renderAll();
                     isApplyingRemoteChange = false;
 
                     updateCloudStatusUI('connected', '雲端同步中');
-                    showToast('🔄 Realtime: 檢測到其他設備更新，已自動同步最新刀具表！', 'info', 4000);
+                    showToast('🔄 Realtime: 收到其他設備即時更新！', 'info', 3000);
                 }
             )
             .subscribe((status) => {

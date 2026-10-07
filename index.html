@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web CNC 刀具與製程管理系統 (CNC Tool & Process Management System)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        darkbg: '#0f172a',
+                        darkcard: '#1e293b',
+                        darkborder: '#334155'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS for Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- html2pdf for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Supabase JS Client for Realtime Cloud Database -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen flex flex-col selection:bg-blue-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700/80 sticky top-0 z-30 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+        <!-- Logo & Title -->
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <i data-lucide="wrench" class="w-6 h-6 text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                    CNC 刀具與製程管理系統
+                </h1>
+                <p class="text-xs text-slate-400 font-mono">Tool & Process Management System v2.5</p>
+            </div>
+        </div>
+
+        <!-- Global Search Bar & Filters -->
+        <div class="flex items-center flex-1 max-w-2xl gap-2">
+            <div class="relative flex-1">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="globalSearchInput" placeholder="全域快速搜尋 (刀號、名稱、規格如 M10/D10、機台)..." 
+                       class="w-full bg-slate-900/90 border border-slate-700 rounded-lg pl-9 pr-8 py-1.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition text-slate-100 placeholder-slate-500">
+                <button id="clearSearchBtn" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Quick Filter Presets -->
+            <select id="typeFilterSelect" class="bg-slate-900/90 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500">
+                <option value="">所有刀具類型</option>
+                <option value="立銑刀">立銑刀 (Endmill)</option>
+                <option value="球頭銑刀">球頭銑刀 (Ball Mill)</option>
+                <option value="鑽頭">鑽頭 (Drill)</option>
+                <option value="絲攻/攻牙刀">絲攻/攻牙刀 (Tap)</option>
+                <option value="面銑刀">面銑刀 (Face Mill)</option>
+                <option value="倒角刀">倒角刀 (Chamfer)</option>
+            </select>
+
+            <select id="stockFilterSelect" class="bg-slate-900/90 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-blue-500">
+                <option value="">所有庫存狀態</option>
+                <option value="在庫">在庫 (In Stock)</option>
+                <option value="使用中">使用中 (In Use)</option>
+                <option value="需補貨">需補貨 (Low Stock)</option>
+                <option value="報廢/修磨">報廢/修磨 (Scrapped)</option>
+            </select>
+        </div>
+
+        <!-- Global Actions -->
+        <div class="flex items-center gap-2">
+            <!-- Cloud Status Indicator & Config Button -->
+            <button id="supabaseConfigBtn" class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium transition border border-slate-600" title="設定 Supabase 雲端資料庫與 Realtime 即時同步">
+                <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
+                <i data-lucide="cloud" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span id="cloudStatusText">本機模式</span>
+            </button>
+
+            <button id="calcModalOpenBtn" class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium transition border border-slate-600">
+                <i data-lucide="calculator" class="w-4 h-4 text-cyan-400"></i>
+                <span>切削參數計算</span>
+            </button>
+            <button id="exportExcelBtn" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition shadow-sm">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                <span>匯出 Excel</span>
+            </button>
+            <button id="exportPdfBtn" class="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition shadow-sm">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+                <span>對刀單 PDF</span>
+            </button>
+            <div class="relative group">
+                <button id="backupMenuBtn" class="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium transition border border-slate-600">
+                    <i data-lucide="database-backup" class="w-4 h-4 text-amber-400"></i>
+                    <span>備份/還原</span>
+                    <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
+                </button>
+                <div class="hidden group-hover:block absolute right-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 z-50 text-xs">
+                    <button id="exportJsonBackupBtn" class="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-700/80 flex items-center gap-2">
+                        <i data-lucide="download" class="w-3.5 h-3.5 text-blue-400"></i>
+                        <span>備份全系統 (JSON)</span>
+                    </button>
+                    <label class="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-700/80 flex items-center gap-2 cursor-pointer">
+                        <i data-lucide="upload" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        <span>還原系統 (JSON)</span>
+                        <input type="file" id="importJsonBackupInput" accept=".json" class="hidden">
+                    </label>
+                </div>
+            </div>
+            <button id="resetDemoDataBtn" title="重置範例資料" class="p-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition border border-slate-600">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Sidebar: Machine & Part Tooling Hierarchy Tree -->
+        <aside class="w-80 bg-slate-800/60 border-r border-slate-700/80 flex flex-col flex-shrink-0 select-none">
+            <!-- Sidebar Header -->
+            <div class="p-3 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/80">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="network" class="w-4 h-4 text-blue-400"></i>
+                    <span class="font-semibold text-sm text-slate-200">機台與工件刀具樹</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button id="addMachineBtn" title="新增機台" class="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                    </button>
+                    <button id="expandAllTreeBtn" title="全部展開/折疊" class="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded transition">
+                        <i data-lucide="chevrons-up-down" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hierarchy Tree Container -->
+            <div id="hierarchyTree" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <!-- Dynamically populated hierarchy tree -->
+            </div>
+
+            <!-- Quick Machine Status Footer -->
+            <div class="p-2.5 border-t border-slate-700/80 bg-slate-900/60 text-xs text-slate-400 flex justify-between items-center">
+                <span>線上機台: <strong id="machineCount" class="text-blue-400">3</strong> 台</span>
+                <span>綁定刀具總數: <strong id="boundToolCount" class="text-cyan-400">0</strong> 把</span>
+            </div>
+        </aside>
+
+        <!-- Right Content Area -->
+        <main class="flex-1 flex flex-col min-w-0 bg-slate-900/90 overflow-hidden">
+
+            <!-- Navigation Tabs -->
+            <div class="bg-slate-800/40 border-b border-slate-700/80 px-4 flex items-center justify-between">
+                <nav class="flex space-x-1" id="mainTabs">
+                    <button data-tab="tab-master" class="tab-btn active px-4 py-2.5 text-sm font-medium border-b-2 border-blue-500 text-blue-400 flex items-center gap-2">
+                        <i data-lucide="database" class="w-4 h-4"></i>
+                        <span>刀具總表 (Master Library)</span>
+                        <span id="masterBadge" class="bg-blue-900/80 text-blue-300 text-xs px-2 py-0.5 rounded-full font-mono">0</span>
+                    </button>
+                    <button data-tab="tab-hierarchy" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                        <span>機台工件配刀 (Part Tooling Setup)</span>
+                        <span id="selectedSetupBadge" class="hidden bg-slate-700 text-cyan-300 text-xs px-2 py-0.5 rounded-full font-mono">未選擇工件</span>
+                    </button>
+                    <button data-tab="tab-machine-status" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i data-lucide="table-2" class="w-4 h-4"></i>
+                        <span>機器現況刀具表</span>
+                    </button>
+                    <button data-tab="tab-presetter" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i data-lucide="git-compare" class="w-4 h-4"></i>
+                        <span>刀具差異比對表</span>
+                    </button>
+                    <button data-tab="tab-custom-fields" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4"></i>
+                        <span>動態自訂欄位 (Custom Fields)</span>
+                        <span id="customFieldsBadge" class="bg-slate-700 text-slate-300 text-xs px-1.5 py-0.5 rounded-full font-mono">0</span>
+                    </button>
+                </nav>
+
+                <div class="flex items-center gap-2 py-1">
+                    <span id="currentSelectionInfo" class="text-xs text-slate-400 font-mono truncate max-w-xs">目前檢視: 全區刀具庫</span>
+                </div>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="flex-1 overflow-y-auto p-4 relative">
+
+                <!-- TAB 1: 刀具總表 (Master Tool Library) -->
+                <section id="tab-master" class="tab-content block space-y-4">
+                    <!-- Action Bar -->
+                    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-800/60 p-3 rounded-xl border border-slate-700/80">
+                        <div class="flex items-center gap-2">
+                            <button id="openAddToolModalBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow-md shadow-blue-600/20">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                <span>新增刀具</span>
+                            </button>
+
+                            <label class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer flex items-center gap-1.5 border border-slate-600">
+                                <i data-lucide="file-up" class="w-4 h-4 text-emerald-400"></i>
+                                <span>批次匯入 CSV/Excel</span>
+                                <input type="file" id="importFileInput" accept=".csv, .xlsx, .xls" class="hidden">
+                            </label>
+
+                            <button id="downloadExcelTemplateBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-600" title="下載可直接填寫的標準匯入 Excel 範本">
+                                <i data-lucide="file-down" class="w-3.5 h-3.5 text-cyan-400"></i>
+                                <span>下載範本</span>
+                            </button>
+                        </div>
+
+                        <!-- Table Stats & Batch actions -->
+                        <div class="flex items-center gap-3 text-xs text-slate-400">
+                            <div class="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-700">
+                                <span>總計刀具: <strong id="statTotalTools" class="text-white font-mono">0</strong></span>
+                            </div>
+                            <div class="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-700">
+                                <span>安全庫存警告: <strong id="statLowStock" class="text-amber-400 font-mono">0</strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Master Tool Data Table -->
+                    <div class="bg-slate-800/50 rounded-xl border border-slate-700/80 overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="bg-slate-800 text-xs uppercase text-slate-400 font-semibold border-b border-slate-700 select-none">
+                                    <tr>
+                                        <th class="py-3 px-3 w-10 text-center">可拖拉</th>
+                                        <th class="py-3 px-3">刀具編號 (Tool ID)</th>
+                                        <th class="py-3 px-3">刀具名稱</th>
+                                        <th class="py-3 px-3">類型</th>
+                                        <th class="py-3 px-3 text-right">外徑 D (mm)</th>
+                                        <th class="py-3 px-3 text-right">全長 L (mm)</th>
+                                        <th class="py-3 px-3 text-center">刃數 Z</th>
+                                        <th class="py-3 px-3">材質 / 鍍膜</th>
+                                        <th class="py-3 px-3">切削參數 (RPM / Feed / 姿態)</th>
+                                        <th class="py-3 px-3">庫存 / 狀態</th>
+                                        <!-- Dynamic Custom Columns will be inserted here -->
+                                        <th id="dynamicColHeaderMarker"></th>
+                                        <th class="py-3 px-3 text-center w-28">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="masterToolTableBody" class="divide-y divide-slate-700/50">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: 機台與工件配刀階層管理 (Machine Part Setup) -->
+                <section id="tab-hierarchy" class="tab-content hidden space-y-4">
+                    <!-- Setup Selector & Tool Table Clone Header -->
+                    <div id="partSetupHeader" class="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2.5 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30">
+                                <i data-lucide="layers" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h3 id="setupTitle" class="text-base font-bold text-white">請從左側點擊選擇工件/工序 (Part/OP)</h3>
+                                <p id="setupSubTitle" class="text-xs text-slate-400">目前未選取工件加工專案。點選左側樹狀節點開始配置刀位 (T01-T24)</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button id="cloneSetupBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium transition border border-slate-600 flex items-center gap-1.5">
+                                <i data-lucide="copy" class="w-4 h-4 text-cyan-400"></i>
+                                <span>複製刀具表至...</span>
+                            </button>
+                            <button id="addToolSlotBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                <span>新增刀槽</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Split Drag & Drop Workspace -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                        <!-- Left: Current Part Tool Slot Magazine (8 cols) -->
+                        <div class="lg:col-span-8 bg-slate-800/50 rounded-xl border border-slate-700/80 p-4 space-y-3">
+                            <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="disc" class="w-4 h-4 text-cyan-400 animate-spin-slow"></i>
+                                    <span class="font-bold text-sm text-slate-200">刀庫配置表 (Tool Magazine Slots)</span>
+                                </div>
+                                <span class="text-xs text-slate-400">可將右側「刀具總表」直接拖曳至刀槽</span>
+                            </div>
+
+                            <!-- Magazine Slots List -->
+                            <div id="partSlotList" class="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                                <!-- Slots generated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Right: Quick Master Tool Picker & Drag Source (4 cols) -->
+                        <div class="lg:col-span-4 bg-slate-800/50 rounded-xl border border-slate-700/80 p-4 space-y-3 flex flex-col">
+                            <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="box" class="w-4 h-4 text-blue-400"></i>
+                                    <span class="font-bold text-sm text-slate-200">刀具總表快速派刀區</span>
+                                </div>
+                                <span class="text-xs text-slate-400">可按拖拉圖示綁定</span>
+                            </div>
+
+                            <input type="text" id="quickPickerSearch" placeholder="過濾總表刀具..." 
+                                   class="w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+
+                            <!-- Quick Draggable List -->
+                            <div id="quickToolList" class="flex-1 overflow-y-auto space-y-2 max-h-[500px] pr-1">
+                                <!-- Quick tools -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: 機器現況刀具表 -->
+                <section id="tab-machine-status" class="tab-content hidden space-y-4">
+                    <!-- Machine Selector -->
+                    <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex flex-wrap items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="monitor" class="w-5 h-5 text-cyan-400"></i>
+                            <span class="font-bold text-slate-200 text-sm">選擇機台查看現況刀具表：</span>
+                        </div>
+                        <select id="machineStatusSelect" class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                            <option value="">-- 請選擇機台 --</option>
+                        </select>
+                        <span id="machineStatusSummary" class="text-xs text-slate-400 font-mono"></span>
+                    </div>
+
+                    <!-- Machine Status Table -->
+                    <div class="bg-slate-800/50 rounded-xl border border-slate-700/80 overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="bg-slate-800 text-xs uppercase text-slate-400 font-semibold border-b border-slate-700">
+                                    <tr>
+                                        <th class="py-3 px-3">工件/工序</th>
+                                        <th class="py-3 px-3">刀號 (T)</th>
+                                        <th class="py-3 px-3">補償 H/D</th>
+                                        <th class="py-3 px-3">刀具編號</th>
+                                        <th class="py-3 px-3">刀具名稱</th>
+                                        <th class="py-3 px-3">類型</th>
+                                        <th class="py-3 px-3 text-right">外徑 D</th>
+                                        <th class="py-3 px-3 text-right">凸出長度</th>
+                                        <th class="py-3 px-3 text-right">RPM</th>
+                                        <th class="py-3 px-3 text-right">Feed</th>
+                                        <th class="py-3 px-3">狀態</th>
+                                        <th class="py-3 px-3">備註</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="machineStatusTableBody" class="divide-y divide-slate-700/50">
+                                    <tr>
+                                        <td colspan="12" class="py-12 text-center text-slate-500">請選擇機台以顯示現況刀具表</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: 刀具差異比對表 -->
+                <section id="tab-presetter" class="tab-content hidden space-y-4">
+                    <!-- Comparison Controls -->
+                    <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-3">
+                        <div class="flex items-center gap-2 mb-2">
+                            <i data-lucide="git-compare" class="w-5 h-5 text-purple-400"></i>
+                            <span class="font-bold text-slate-200 text-sm">機器現況刀具表 vs. 其他製程刀具表 差異比對</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <label class="text-xs text-slate-400">【基準】機器現況 — 選擇機台：</label>
+                                <select id="diffMachineSelect" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500">
+                                    <option value="">-- 請選擇機台 --</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs text-slate-400">【比對】目標製程工件 — 選擇工件/工序：</label>
+                                <select id="diffPartSelect" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500">
+                                    <option value="">-- 請先選擇機台 --</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button id="runDiffBtn" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                執行比對
+                            </button>
+                            <div id="diffSummaryBadges" class="flex items-center gap-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Diff Result Table -->
+                    <div class="bg-slate-800/50 rounded-xl border border-slate-700/80 overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="bg-slate-800 text-xs uppercase text-slate-400 font-semibold border-b border-slate-700">
+                                    <tr>
+                                        <th class="py-3 px-3">差異狀態</th>
+                                        <th class="py-3 px-3">刀號 (T)</th>
+                                        <th class="py-3 px-3">刀具編號</th>
+                                        <th class="py-3 px-3">刀具名稱</th>
+                                        <th class="py-3 px-3 text-right">外徑 D</th>
+                                        <th class="py-3 px-3">現況機台 (工件)</th>
+                                        <th class="py-3 px-3">比對製程 (工件)</th>
+                                        <th class="py-3 px-3">說明</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="diffTableBody" class="divide-y divide-slate-700/50">
+                                    <tr>
+                                        <td colspan="8" class="py-12 text-center text-slate-500">請選擇機台與目標製程後執行比對</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 5: 動態欄位擴充管理 (Custom Fields Manager) -->
+                <section id="tab-custom-fields" class="tab-content hidden space-y-4">
+                    <div class="bg-slate-800/80 p-5 rounded-xl border border-slate-700 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                            <div>
+                                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                    <i data-lucide="sliders" class="w-5 h-5 text-blue-400"></i>
+                                    <span>自訂刀具屬性欄位擴充 (Dynamic Custom Fields)</span>
+                                </h3>
+                                <p class="text-xs text-slate-400 mt-1">管理員可在這裡動態擴充刀具屬性（例如：最近量測日期、供應商、刀柄規格、每把單價、磨耗上限...），新增後全系統表格與編輯表單會自動呈現象。</p>
+                            </div>
+                            <button id="openAddCustomFieldModalBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                <span>新增自訂欄位</span>
+                            </button>
+                        </div>
+
+                        <!-- Current Custom Fields List -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="bg-slate-900 text-xs uppercase text-slate-400 border-b border-slate-700">
+                                    <tr>
+                                        <th class="py-3 px-4">欄位 Key</th>
+                                        <th class="py-3 px-4">顯示名稱 (Label)</th>
+                                        <th class="py-3 px-4">資料類型</th>
+                                        <th class="py-3 px-4">單位 (如 mm, USD)</th>
+                                        <th class="py-3 px-4">下拉選項 / 預設值</th>
+                                        <th class="py-3 px-4 text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customFieldsTableBody" class="divide-y divide-slate-700/60">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL 1: 新增/編輯刀具 Modal -->
+    <div id="toolModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <!-- Modal Header -->
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 id="toolModalTitle" class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="wrench" class="w-5 h-5 text-blue-400"></i>
+                    <span>新增刀具 (Add Master Tool)</span>
+                </h3>
+                <button id="closeToolModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Form Body -->
+            <form id="toolForm" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <input type="hidden" id="toolFormId">
+
+                <!-- Section 1: 基本資訊 -->
+                <div>
+                    <h4 class="text-xs uppercase font-bold text-blue-400 tracking-wider mb-3 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-4 h-4"></i>
+                        <span>基本刀具屬性 (Basic Attributes)</span>
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀具編號 (Tool ID) *</label>
+                            <input type="text" id="toolFormCode" required placeholder="例: T-EM-010" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀具名稱 *</label>
+                            <input type="text" id="toolFormName" required placeholder="例: D10 4刃鎢鋼超微粒銑刀" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀具類型 *</label>
+                            <select id="toolFormType" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                                <option value="立銑刀">立銑刀 (Endmill)</option>
+                                <option value="球頭銑刀">球頭銑刀 (Ball Mill)</option>
+                                <option value="鑽頭">鑽頭 (Drill)</option>
+                                <option value="絲攻/攻牙刀">絲攻/攻牙刀 (Tap)</option>
+                                <option value="面銑刀">面銑刀 (Face Mill)</option>
+                                <option value="倒角刀">倒角刀 (Chamfer)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀徑 D (mm) *</label>
+                            <input type="number" step="0.01" id="toolFormD" required placeholder="10.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刃長/全長 L (mm)</label>
+                            <input type="number" step="0.1" id="toolFormL" placeholder="75.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刃數 Z</label>
+                            <input type="number" id="toolFormZ" value="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀具材質</label>
+                            <input type="text" id="toolFormMaterial" placeholder="超微粒硬質合金 (Carbide)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">鍍膜</label>
+                            <input type="text" id="toolFormCoating" placeholder="TiAlN / AlCrN" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: 切削參數與冷卻 -->
+                <div>
+                    <h4 class="text-xs uppercase font-bold text-cyan-400 tracking-wider mb-3 flex items-center gap-1.5">
+                        <i data-lucide="gauge" class="w-4 h-4"></i>
+                        <span>建議切削參數 (Cutting Parameters)</span>
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">主軸轉速 (RPM)</label>
+                            <input type="number" id="toolFormRPM" placeholder="5000" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">進給速度 F (mm/min)</label>
+                            <input type="number" id="toolFormFeed" placeholder="1200" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">每刃進給 fz (mm/t)</label>
+                            <input type="number" step="0.001" id="toolFormFz" placeholder="0.06" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">冷卻方式</label>
+                            <select id="toolFormCoolant" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                                <option value="水溶性切削液">水溶性切削液 (Water Coolant)</option>
+                                <option value="切削油">切削油 (Oil Coolant)</option>
+                                <option value="高壓吹氣">高壓吹氣 (Air Blast)</option>
+                                <option value="微量潤滑 (MQL)">微量潤滑 (MQL)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: 庫存與狀態 -->
+                <div>
+                    <h4 class="text-xs uppercase font-bold text-emerald-400 tracking-wider mb-3 flex items-center gap-1.5">
+                        <i data-lucide="package" class="w-4 h-4"></i>
+                        <span>庫存管理 (Inventory Status)</span>
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">現有庫存量</label>
+                            <input type="number" id="toolFormStock" value="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">安全庫存量</label>
+                            <input type="number" id="toolFormSafety" value="3" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">刀具狀態</label>
+                            <select id="toolFormStatus" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                                <option value="在庫">在庫 (In Stock)</option>
+                                <option value="使用中">使用中 (In Use)</option>
+                                <option value="修磨中">修磨中 (Regrinding)</option>
+                                <option value="報廢">報廢 (Scrapped)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: 動態自訂欄位輸入 (Dynamic Custom Fields Inputs) -->
+                <div id="dynamicCustomFieldsContainer" class="hidden">
+                    <h4 class="text-xs uppercase font-bold text-amber-400 tracking-wider mb-3 flex items-center gap-1.5">
+                        <i data-lucide="sliders" class="w-4 h-4"></i>
+                        <span>自訂擴充屬性 (Custom Fields)</span>
+                    </h4>
+                    <div id="dynamicFieldsInputs" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Filled by JS dynamically -->
+                    </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="pt-4 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelToolModalBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition">
+                        取消
+                    </button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition shadow-md shadow-blue-600/30">
+                        儲存刀具
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: 新增自訂欄位 Modal -->
+    <div id="customFieldModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-blue-400"></i>
+                    <span>新增自訂刀具屬性欄位</span>
+                </h3>
+                <button id="closeCustomFieldModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="customFieldForm" class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">欄位代碼 (Field Key, 英文無空格) *</label>
+                    <input type="text" id="cfKey" required placeholder="例: supplier, last_measured" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">顯示名稱 (Label) *</label>
+                    <input type="text" id="cfLabel" required placeholder="例: 供應商, 最近校正日期" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">資料類型 *</label>
+                    <select id="cfType" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        <option value="text">單行文字 (Text)</option>
+                        <option value="number">數字 (Number)</option>
+                        <option value="select">下拉單選 (Dropdown Select)</option>
+                        <option value="date">日期 (Date)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">單位 (如 mm, USD, 次數, 可選)</label>
+                    <input type="text" id="cfUnit" placeholder="例: mm, USD" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">下拉選項 (若為選單請用逗號隔開)</label>
+                    <input type="text" id="cfOptions" placeholder="選項A,選項B,選項C" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+
+                <div class="pt-3 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelCustomFieldModalBtn" class="bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm">建立欄位</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: 切削參數即時計算器 (Cutting Parameters Calculator) -->
+    <div id="calcModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-5 h-5 text-cyan-400"></i>
+                    <span>CNC 切削參數即時計算器 (Speed & Feed Calculator)</span>
+                </h3>
+                <button id="closeCalcModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">刀具直徑 D (mm)</label>
+                        <input type="number" id="calcD" value="10" step="0.1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">刃數 Z</label>
+                        <input type="number" id="calcZ" value="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">切削速度 Vc (m/min)</label>
+                        <input type="number" id="calcVc" value="160" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">每刃進給 fz (mm/t)</label>
+                        <input type="number" id="calcFz" value="0.05" step="0.005" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">切深 ap (mm)</label>
+                        <input type="number" id="calcAp" value="2.0" step="0.1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">切寬 ae (mm)</label>
+                        <input type="number" id="calcAe" value="5.0" step="0.1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100">
+                    </div>
+                </div>
+
+                <!-- Formula Card -->
+                <div class="bg-slate-900/90 p-3.5 rounded-xl border border-cyan-500/30 font-mono space-y-1.5 text-xs">
+                    <div class="text-cyan-400 font-bold border-b border-slate-800 pb-1 flex items-center justify-between">
+                        <span>切削動力學公式</span>
+                        <span class="text-[10px] text-slate-400">ISO Milling Standard</span>
+                    </div>
+                    <div class="text-slate-300">RPM = (1000 × Vc) / (π × D)</div>
+                    <div class="text-slate-300">F (進給速度) = RPM × Z × fz</div>
+                    <div class="text-slate-300">MRR (排屑率) = (ap × ae × F) / 1000 (cm³/min)</div>
+                </div>
+
+                <!-- Result Box -->
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-blue-900/30 border border-blue-500/40 p-2.5 rounded-xl">
+                        <div class="text-xs text-blue-300">主軸轉速 (RPM)</div>
+                        <div id="resRPM" class="text-xl font-bold font-mono text-white mt-1">5093</div>
+                    </div>
+                    <div class="bg-cyan-900/30 border border-cyan-500/40 p-2.5 rounded-xl">
+                        <div class="text-xs text-cyan-300">進給速度 F (mm/min)</div>
+                        <div id="resFeed" class="text-xl font-bold font-mono text-white mt-1">1018</div>
+                    </div>
+                    <div class="bg-emerald-900/30 border border-emerald-500/40 p-2.5 rounded-xl">
+                        <div class="text-xs text-emerald-300">排屑體積率 MRR</div>
+                        <div id="resMRR" class="text-xl font-bold font-mono text-emerald-300 mt-1">10.2 <span class="text-xs font-normal text-slate-400">cm³/min</span></div>
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="pt-2 flex justify-between items-center border-t border-slate-700">
+                    <button type="button" id="copyCalcParamsBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        <span>複製切削數值</span>
+                    </button>
+                    <button type="button" id="applyCalcToFormBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition shadow-sm">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                        <span>套用至目前刀具表單</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: 新增機台與工件 Modal -->
+    <div id="nodeModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 id="nodeModalTitle" class="text-base font-bold text-white">新增機台 / 工件</h3>
+                <button id="closeNodeModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="nodeForm" class="p-5 space-y-4">
+                <input type="hidden" id="nodeFormParentId">
+                <div>
+                    <label id="nodeFormLabel" class="block text-xs text-slate-400 mb-1">名稱 *</label>
+                    <input type="text" id="nodeFormName" required placeholder="例: VMC-850A 或 Part-B202_OP10" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="pt-3 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelNodeModalBtn" class="bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm">確定新增</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 5: 複製刀具表至其他機台 Modal -->
+    <div id="cloneModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="copy" class="w-5 h-5 text-cyan-400"></i>
+                    複製加工刀具表 (Clone Tool Setup)
+                </h3>
+                <button id="closeCloneModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div id="cloneSourceInfo" class="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300">來源工件：-</div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">目標機台 *</label>
+                    <select id="cloneTargetMachine" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                        <option value="">-- 請選擇目標機台 --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">新工件/工序名稱 *</label>
+                    <input type="text" id="cloneNewPartName" placeholder="例: Part-A101_OP10_COPY" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="pt-3 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelCloneModalBtn" class="bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button type="button" id="confirmCloneBtn" class="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-lg text-sm flex items-center gap-1.5">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                        確認複製
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 6: 工件操作 (編輯/移動) Modal -->
+    <div id="partEditModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 id="partEditModalTitle" class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="edit-3" class="w-5 h-5 text-blue-400"></i>
+                    編輯工件資訊
+                </h3>
+                <button id="closePartEditModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <input type="hidden" id="partEditId">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">工件/工序名稱 *</label>
+                    <input type="text" id="partEditName" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">所屬機台 (可移動至其他機台)</label>
+                    <select id="partEditMachine" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                    </select>
+                </div>
+                <div class="pt-3 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelPartEditModalBtn" class="bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button type="button" id="confirmPartEditBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm">儲存變更</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 7: 機台編輯 Modal -->
+    <div id="machineEditModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="monitor" class="w-5 h-5 text-cyan-400"></i>
+                    編輯機台名稱
+                </h3>
+                <button id="closeMachineEditModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="machineEditForm" class="p-5 space-y-4">
+                <input type="hidden" id="machineEditId">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">機台名稱/編號 *</label>
+                    <input type="text" id="machineEditName" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="pt-3 border-t border-slate-700 flex justify-end gap-3">
+                    <button type="button" id="cancelMachineEditModalBtn" class="bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-lg text-sm">儲存機台</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 8: 對刀單預覽與 PDF 列印 Modal (含 #printableArea) -->
+    <div id="presetterModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-check" class="w-5 h-5 text-rose-400"></i>
+                    <h3 class="text-base font-bold text-white">現場加工對刀單預覽與匯出 (Tool Setup Presetter Sheet)</h3>
+                </div>
+                <button id="closePresetterModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Control Bar for Presetter Modal -->
+            <div class="bg-slate-900/80 px-5 py-3 border-b border-slate-700/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="flex items-center gap-3">
+                    <span class="text-slate-400 font-medium">切換列印工件：</span>
+                    <select id="presetterPartSelect" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-slate-200 focus:outline-none focus:border-rose-500 text-xs">
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="printBrowserBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>瀏覽器列印</span>
+                    </button>
+                    <button id="downloadPdfActionBtn" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>下載 PDF 檔案</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Printable Area Sheet -->
+            <div class="flex-1 overflow-y-auto p-6 bg-slate-950/60">
+                <div id="printableArea" class="bg-white text-slate-900 p-8 rounded-xl shadow-lg border border-slate-200 mx-auto max-w-3xl space-y-5 text-xs">
+                    <!-- Dynamic Sheet Rendered here by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 9: Supabase 雲端即時同步設定 Modal -->
+    <div id="supabaseModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div class="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="cloud-lightning" class="w-5 h-5 text-emerald-400"></i>
+                    <h3 class="text-base font-bold text-white">Supabase 雲端資料庫 & Realtime 同步設定</h3>
+                </div>
+                <button id="closeSupabaseModalBtn" class="p-1 text-slate-400 hover:text-slate-200 rounded">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-4 text-xs">
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700 space-y-1.5 text-slate-300">
+                    <div class="font-bold text-emerald-400 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-3.5 h-3.5"></i>
+                        <span>零伺服器架構 (Serverless Cloud DB)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">
+                        設定完成後，全廠所有設備（平板、工控電腦、辦公室）將共用同一個雲端資料庫，並且透過 <strong>WebSocket (Realtime)</strong> 自動在數毫秒內即時同步所有刀具與配刀變更！
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Supabase Project URL *</label>
+                        <input type="url" id="sbUrlInput" placeholder="例: https://abcdefghijklm.supabase.co" 
+                               class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-emerald-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1">Supabase Anon Public API Key *</label>
+                        <textarea id="sbKeyInput" rows="2" placeholder="貼上 supabase 的 anon public api key (eyJhbGciOi...)" 
+                                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono text-[11px] focus:border-emerald-500 focus:outline-none"></textarea>
+                    </div>
+                </div>
+
+                <!-- One-click SQL Guide -->
+                <div class="border border-slate-700 rounded-lg p-2.5 bg-slate-950/60 space-y-1 font-mono text-[11px]">
+                    <div class="flex items-center justify-between text-slate-400">
+                        <span>Supabase SQL 建表語法 (建表一次即可)：</span>
+                        <button id="copySqlBtn" class="text-cyan-400 hover:text-cyan-300 underline font-sans">複製 SQL</button>
+                    </div>
+                    <div id="sqlSnippet" class="text-slate-500 select-all overflow-x-auto whitespace-pre">create table if not exists cnc_storage (
+  id text primary key default 'default_workshop',
+  master_tools jsonb not null default '[]'::jsonb,
+  hierarchy jsonb not null default '[]'::jsonb,
+  custom_fields jsonb not null default '[]'::jsonb,
+  updated_at timestamptz default now()
+);
+alter table cnc_storage enable row level security;
+drop policy if exists "public_all" on cnc_storage;
+create policy "public_all" on cnc_storage for all using (true) with check (true);
+insert into cnc_storage (id) values ('default_workshop') on conflict do nothing;
+alter publication supabase_realtime add table cnc_storage;</div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-700 flex justify-between items-center">
+                    <button type="button" id="disconnectSupabaseBtn" class="bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/80 px-3 py-1.5 rounded-lg transition font-medium">
+                        清除設定 (切換回本機模式)
+                    </button>
+                    <button type="button" id="saveSupabaseConfigBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg transition font-medium flex items-center gap-1.5 shadow-md shadow-emerald-600/20">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        <span>儲存並連線同步</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- App JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>

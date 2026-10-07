@@ -1,0 +1,152 @@
+/* Custom Industrial Precision Theme Styles */
+
+@keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+    animation: spin-slow 12s linear infinite;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* Tree Navigation Connector lines */
+.tree-node-content {
+    position: relative;
+    transition: all 0.15s ease-in-out;
+}
+
+.tree-node-content:hover {
+    background-color: rgba(30, 41, 59, 0.8);
+}
+
+.tree-node-content.active {
+    background-color: rgba(37, 99, 235, 0.25);
+    border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* Active tab button styling */
+.tab-btn {
+    transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+    border-color: #3b82f6;
+    color: #60a5fa;
+}
+
+/* Drag and Drop Visual Cues */
+.drag-over {
+    border-color: #3b82f6 !important;
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3) inset;
+}
+
+.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+/* Toast Notification Animations */
+.toast-item {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: toast-slide-in 0.3s ease-out forwards;
+}
+
+.toast-item.toast-leave {
+    opacity: 0;
+    transform: translateX(30px);
+}
+
+@keyframes toast-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Master row drag cursor */
+tr[draggable="true"] {
+    cursor: grab;
+}
+tr[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+/* Print Styles for Shop Floor Presetter Sheet */
+@media print {
+    body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+
+    header, aside, main, #mainTabs, #globalSearchInput, button, select, #toolModal, #nodeModal, #cloneModal, #partEditModal, #machineEditModal, #calcModal, #customFieldModal, #toastContainer {
+        display: none !important;
+    }
+
+    #presetterModal {
+        display: block !important;
+        position: static !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+
+    #presetterModal > div {
+        max-width: 100% !important;
+        max-height: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    #presetterModal .p-4, #presetterModal .border-b, #presetterModal .bg-slate-900\/80 {
+        display: none !important;
+    }
+
+    #printableArea {
+        display: block !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+    }
+
+    #printableArea * {
+        color: #000000 !important;
+        border-color: #333333 !important;
+    }
+
+    table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+    }
+
+    th, td {
+        border: 1px solid #777777 !important;
+        padding: 6px 8px !important;
+    }
+}
